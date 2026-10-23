@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>教师端 · 课堂喊话</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;background:#f4f7fb;color:#0f172a;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  header{
+    position:sticky;top:0;z-index:10;
+    background:rgba(244,247,251,.86);backdrop-filter:blur(12px);
+    border-bottom:1px solid #e6edf6;padding:14px 20px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.01em}
+  .conn{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b}
+  .conn .dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1;transition:.2s}
+  .conn .dot.on{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.15)}
+  .conn .dot.off{background:#f43f5e;box-shadow:0 0 0 3px rgba(244,63,94,.15)}
+
+  main{max-width:720px;margin:0 auto;padding:20px 16px 60px;display:flex;flex-direction:column;gap:16px}
+
+  .card{background:#fff;border:1px solid #e6edf6;border-radius:18px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+  .label{font-size:13px;font-weight:600;color:#475569;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+
+  .class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+  .class-btn{
+    display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;
+    border:1.5px solid #e6edf6;background:#fff;font-size:14px;font-weight:600;color:#334155;
+    cursor:pointer;font-family:inherit;text-align:left;transition:all .15s ease;
+  }
+  .class-btn:hover{border-color:#bfdbfe;background:#f8fbff}
+  .class-btn.active{border-color:#2563eb;background:#eff6ff;color:#1d4ed8;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .cls-dot{width:7px;height:7px;border-radius:50%;background:#cbd5e1;flex:none;transition:.2s}
+  .cls-dot.on{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+
+  textarea{
+    width:100%;min-height:120px;resize:vertical;border:1.5px solid #e6edf6;border-radius:14px;
+    padding:14px;font-family:inherit;font-size:17px;line-height:1.6;color:#0f172a;background:#fcfdff;
+    outline:none;transition:border-color .15s,box-shadow .15s;
+  }
+  textarea:focus{border-color:#93c5fd;box-shadow:0 0 0 4px rgba(59,130,246,.10);background:#fff}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{font-size:13px;padding:7px 12px;border-radius:999px;border:1px solid #e6edf6;background:#f8fafc;color:#475569;cursor:pointer;font-family:inherit;transition:.15s}
+  .chip:hover{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+
+  .row{display:flex;align-items:center;justify-content:space-between;margin-top:14px;gap:12px}
+  .switch{display:flex;align-items:center;gap:8px;font-size:14px;color:#475569;cursor:pointer;user-select:none}
+  .switch input{width:18px;height:18px;accent-color:#ef4444}
+
+  .primary{
+    width:100%;margin-top:16px;padding:16px;border:none;border-radius:14px;
+    background:linear-gradient(180deg,#3b82f6,#2563eb);color:#fff;font-size:17px;font-weight:700;
+    cursor:pointer;font-family:inherit;letter-spacing:.02em;
+    box-shadow:0 8px 20px -8px rgba(37,99,235,.7);transition:transform .12s,filter .15s;
+  }
+  .primary:active{transform:scale(.985)}
+  .primary:disabled{background:#cbd5e1;box-shadow:none;cursor:not-allowed}
+  .primary.urgent{background:linear-gradient(180deg,#f87171,#ef4444);box-shadow:0 8px 20px -8px rgba(239,68,68,.7)}
+
+  #recent{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  #recent li{display:flex;gap:10px;align-items:flex-start;font-size:14px;padding:10px 12px;background:#f8fafc;border-radius:10px}
+  #recent .time{color:#94a3b8;font-size:12px;flex:none}
+  #recent .txt{flex:1;word-break:break-word;line-height:1.5}
+  #recent li.urgent{background:#fef2f2;color:#b91c1c}
+  #recent .empty{color:#94a3b8;font-size:13px;justify-content:center}
+
+  .toast{
+    position:fixed;left:50%;bottom:32px;transform:translate(-50%,20px);
+    background:#0f172a;color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;
+    opacity:0;pointer-events:none;transition:all .25s ease;z-index:100;max-width:90vw;
+    box-shadow:0 10px 30px -10px rgba(15,23,42,.5);
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.err{background:#dc2626}
+  .toast.ok{background:#16a34a}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📣 课堂喊话</h1>
+  <div class="conn"><span class="dot" id="dot"></span><span id="statusText">连接中…</span></div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="label"><span>1. 选择班级</span><span id="targetInfo" style="font-weight:400;color:#94a3b8;font-size:12px">未选择</span></div>
+    <div class="class-grid" id="classGrid"></div>
+  </section>
+
+  <section class="card">
+    <div class="label"><span>2. 输入通知内容</span><span id="counter" style="font-weight:400;color:#94a3b8;font-size:12px">0/200</span></div>
+    <textarea id="msgInput" maxlength="200" placeholder="例如：请同学们安静，翻到课本第 12 页"></textarea>
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="urgent"> 紧急通知（红色高亮 + 播报两遍）</label>
+    </div>
+    <button class="primary" id="sendBtn" disabled>一键发送</button>
+  </section>
+
+  <section class="card">
+    <div class="label">
+      <span>最近发送</span>
+      <button id="clearRecent" style="border:none;background:none;color:#94a3b8;font-size:12px;cursor:pointer;font-family:inherit">清空</button>
+    </div>
+    <ul id="recent"><li class="empty">暂无记录</li></ul>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const QUICK = [
+  '请安静，现在开始上课',
+  '请翻到课本第 __ 页',
+  '这道题给大家 3 分钟',
+  '请全体起立，排队集合',
+  '下课前来讲台交作业',
+  '老师马上到，请稍等'
+];
+
+let socket, classes = [], selectedClass = null, presence = {}, recent = [];
+
+init();
+
+async function init() {
+  try { classes = await (await fetch('/api/classes')).json(); } catch { classes = []; }
+  renderClasses();
+  renderChips();
+  restoreRecent();
+  connect();
+
+  $('#sendBtn').addEventListener('click', send);
+  $('#urgent').addEventListener('change', updateSendState);
+  $('#msgInput').addEventListener('input', updateCounter);
+  $('#msgInput').addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
+  });
+  $('#clearRecent').addEventListener('click', () => {
+    recent = []; localStorage.removeItem('recentMsgs'); renderRecent();
+  });
+}
+
+/* ---------- 网络 ---------- */
+function connect() {
+  socket = io();
+
+  socket.on('connect', () => {
+    setConn('on', '已连接');
+    if (selectedClass) socket.emit('join', { role: 'teacher', classId: selectedClass });
+    updateSendState();
+  });
+  socket.on('disconnect', () => { setConn('off', '已断开'); updateSendState(); });
+  socket.on('connect_error', () => { setConn('off', '连接失败'); updateSendState(); });
+  socket.on('presence', onPresence);
+}
+
+function setConn(state, text) {
+  const dot = $('#dot');
+  dot.className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
+  $('#statusText').textContent = text;
+}
+
+/* ---------- 班级 ---------- */
+function renderClasses() {
+  $('#classGrid').innerHTML = classes.map(c => `
+    <button class="class-btn" data-id="${c.id}">
+      <span class="cls-dot" data-id="${c.id}"></span>
+      <span>${escapeHtml(c.name)}</span>
+    </button>`).join('');
+
+  $('#classGrid').querySelectorAll('.class-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectClass(btn.dataset.id));
+  });
+
+  const last = localStorage.getItem('teacherClass');
+  if (last && classes.some(c => c.id === last)) selectClass(last);
+}
+
+function selectClass(id) {
+  selectedClass = id;
+  localStorage.setItem('teacherClass', id);
+  document.querySelectorAll('.class-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+  if (socket?.connected) socket.emit('join', { role: 'teacher', classId: id });
+  updateSendState();
+}
+
+function onPresence(p) {
+  presence[p.classId] = p.online;
+  const dot = document.querySelector(`.cls-dot[data-id="${p.classId}"]`);
+  if (dot) dot.classList.toggle('on', p.online);
+  if (p.classId === selectedClass) updateSendState();
+}
+
+function updateSendState() {
+  const connected = !!socket?.connected;
+  const online = !!presence[selectedClass];
+  const btn = $('#sendBtn');
+  btn.disabled = !selectedClass || !connected;
+  btn.classList.toggle('urgent', $('#urgent').checked && !btn.disabled);
+
+  const info = $('#targetInfo');
+  if (!selectedClass) { info.textContent = '未选择'; info.style.color = '#94a3b8'; }
+  else if (online)    { info.textContent = '● 大屏在线'; info.style.color = '#16a34a'; }
+  else                { info.textContent = '○ 大屏未连接'; info.style.color = '#f59e0b'; }
+}
+
+/* ---------- 发送 ---------- */
+function send() {
+  const text = $('#msgInput').value.trim();
+  if (!selectedClass) return toast('请先选择班级', 'err');
+  if (!text) return toast('请输入通知内容', 'err');
+  if (!socket?.connected) return toast('与服务器断开，请稍后重试', 'err');
+
+  const btn = $('#sendBtn');
+  btn.disabled = true;
+  btn.textContent = '发送中…';
+
+  socket.emit('message:send',
+    { classId: selectedClass, text, urgent: $('#urgent').checked },
+    res => {
+      btn.textContent = '一键发送';
+      updateSendState();
+      if (res?.ok) {
+        $('#msgInput').value = '';
+        $('#urgent').checked = false;
+        updateCounter();
+        updateSendState();
+        addRecent(res.msg);
+        toast('已发送 ✓', 'ok');
+        if (navigator.vibrate) navigator.vibrate(30);
+      } else {
+        toast(res?.error || '发送失败', 'err');
+      }
+    });
+}
+
+function updateCounter() {
+  $('#counter').textContent = $('#msgInput').value.length + '/200';
+}
+
+/* ---------- 快捷短语 ---------- */
+function renderChips() {
+  $('#chips').innerHTML = QUICK.map(q => `<button class="chip">${escapeHtml(q)}</button>`).join('');
+  $('#chips').querySelectorAll('.chip').forEach((c, i) => {
+    c.addEventListener('click', () => {
+      $('#msgInput').value = QUICK[i];
+      updateCounter();
+      $('#msgInput').focus();
+    });
+  });
+}
+
+/* ---------- 最近发送 ---------- */
+function addRecent(msg) {
+  recent.unshift(msg);
+  recent = recent.slice(0, 10);
+  try { localStorage.setItem('recentMsgs', JSON.stringify(recent)); } catch {}
+  renderRecent();
+}
+
+function restoreRecent() {
+  try { recent = JSON.parse(localStorage.getItem('recentMsgs') || '[]'); } catch { recent = []; }
+  renderRecent();
+}
+
+function renderRecent() {
+  const ul = $('#recent');
+  if (!recent.length) { ul.innerHTML = '<li class="empty">暂无记录</li>'; return; }
+  ul.innerHTML = recent.map(m => {
+    const cls = classes.find(c => c.id === m.classId)?.name || '未知班级';
+    return `<li class="${m.urgent ? 'urgent' : ''}">
+      <span class="time">${fmtTime(m.ts)}</span>
+      <span class="txt"><b style="font-weight:600">${escapeHtml(cls)}</b> · ${escapeHtml(m.text)}</span>
+    </li>`;
+  }).join('');
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg, type = '') {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
