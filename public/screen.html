@@ -26,9 +26,16 @@
   select.ghost option{background:#111a2e; color:#fff;}
   
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center}
-  #msg{font-size:clamp(40px,9vw,140px);font-weight:800;line-height:1.25;letter-spacing:.02em;
+  #msg{
+    /* 移除固定的 clamp，改由 JS 动态计算 */
+    font-size: 120px; 
+    font-weight:800;line-height:1.25;letter-spacing:.02em;
     max-width:95%;opacity:0;transform:translateY(24px);
-    transition:opacity .4s cubic-bezier(.2,.7,.3,1),transform .4s cubic-bezier(.2,.7,.3,1),color .2s}
+    transition:opacity .4s cubic-bezier(.2,.7,.3,1),transform .4s cubic-bezier(.2,.7,.3,1),color .2s;
+    text-align: center;
+    word-wrap: break-word; /* 防止超长英文撑破屏幕 */
+    white-space: pre-wrap; /* 保留换行符 */
+  }
   #msg.show{opacity:1;transform:none}
   #msg.idle{color:#334155;font-size:clamp(26px,4vw,54px)}
   #msg.urgent{color:#f87171;text-shadow:0 0 70px rgba(248,113,113,.4)}
@@ -261,12 +268,36 @@ function connectToClass(classId, fullName) {
     socket.emit('join', { role: 'screen', classId });
   }
 }
-
+// 动态调整字体大小
+function adjustFontSize() {
+  const msgEl = document.getElementById('msg');
+  const mainEl = document.querySelector('main');
+  
+  // 获取容器可用高度和宽度（减去边距）
+  const maxWidth = mainEl.clientWidth - 80;
+  const maxHeight = mainEl.clientHeight - 80;
+  
+  // 初始字体大小（最大字号）
+  let fontSize = 140; 
+  msgEl.style.fontSize = fontSize + 'px';
+  
+  // 如果超出范围，就不断缩小字体，直到完全包裹在里面为止
+  while ((msgEl.offsetHeight > maxHeight || msgEl.offsetWidth > maxWidth) && fontSize > 24) {
+    fontSize -= 4; // 每次缩小 4px
+    msgEl.style.fontSize = fontSize + 'px';
+  }
+}
+ 
 function onMessage(msg) {
   const el = $('#msg');
   el.classList.remove('show', 'urgent', 'idle');
   el.textContent = msg.text;
-  void el.offsetWidth;
+  void el.offsetWidth; 
+  
+  // 👇 新增这一行：在显示前，让字体自适应
+  adjustFontSize(); 
+  // 👆
+  
   el.classList.add('show');
 
   if (msg.urgent) {
