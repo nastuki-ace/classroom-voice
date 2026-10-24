@@ -15,9 +15,15 @@
   .conn{display:flex;align-items:center;gap:8px;font-size:15px;color:#94a3b8}
   .dot{width:10px;height:10px;border-radius:50%;background:#f43f5e;transition:.2s}
   .dot.on{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.2)}
-  button.ghost{padding:10px 18px;border:1px solid #1e293b;border-radius:999px;background:#111a2e;
-    color:#cbd5e1;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s}
-  button.ghost:hover{border-color:#3b82f6;color:#fff}
+  
+  /* 按钮和下拉菜单样式 */
+  button.ghost, select.ghost{
+    padding:10px 18px;border:1px solid #1e293b;border-radius:999px;background:#111a2e;
+    color:#cbd5e1;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;outline:none;
+  }
+  button.ghost:hover, select.ghost:hover{border-color:#3b82f6;color:#fff}
+  select.ghost{max-width:200px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;}
+  select.ghost option{background:#111a2e; color:#fff;}
   
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center}
   #msg{font-size:clamp(40px,9vw,140px);font-weight:800;line-height:1.25;letter-spacing:.02em;
@@ -52,7 +58,10 @@
   <div class="brand" id="brand">课堂大屏</div>
   <div class="right">
     <button class="ghost" id="switchBtn">切换班级</button>
-    <button class="ghost" id="voiceBtn">🔊 启用语音</button>
+    <!-- 音色选择下拉菜单 -->
+    <select class="ghost" id="voiceSelect">
+      <option value="">🔊 请选择音色...</option>
+    </select>
     <div class="conn"><span class="dot" id="dot"></span><span id="connText">未连接</span></div>
   </div>
 </header>
@@ -92,6 +101,7 @@
 const $ = s => document.querySelector(s);
 let socket = null;
 let voiceEnabled = false;
+let currentVoice = null; // 当前选中的音色对象
 
 // 临时选择变量
 let currentStage = '';
@@ -103,11 +113,14 @@ init();
 function init() {
   updateClock();
   setInterval(updateClock, 1000);
-  $('#voiceBtn').addEventListener('click', enableVoice);
+  
   $('#switchBtn').addEventListener('click', () => {
     $('#picker').style.display = 'flex';
-    goBack('stage'); // 重置到第一页
+    goBack('stage');
   });
+
+  // 加载并处理浏览器音色
+  initVoices();
 
   // 检查本地是否已经保存过选择
   const savedConfig = localStorage.getItem('screenConfig');
@@ -118,16 +131,87 @@ function init() {
   }
 }
 
+/* ================= 语音相关逻辑 ================= */
+function initVoices() {
+  const select = $('#voiceSelect');
+  
+  function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    // 筛选中文音色 (包含 zh 或 cmn)
+    const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('cmn'));
+    
+    // 避免重复添加
+    if (zhVoices.length > 0 && select.options.length <= 1) {
+      zhVoices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.voiceURI;
+        // 清理一下太长的英文名字，让界面好看点
+        let displayName = v.name.replace('Microsoft ', '').replace(' Online (Natural)', '');
+        opt.textContent = displayName;
+        select.appendChild(opt);
+      });
+
+      // 恢复上次的选择
+      const savedVoiceURI = localStorage.getItem('screenVoiceURI');
+      if (savedVoiceURI && zhVoices.some(v => v.voiceURI === savedVoiceURI)) {
+        select.value = savedVoiceURI;
+        currentVoice = zhVoices.find(v => v.voiceURI === savedVoiceURI);
+        voiceEnabled = true;
+      } else {
+        // 默认选中带有 "Xiaoxiao" 或 "晓晓" 的，否则选第一个
+        const defaultVoice = zhVoices.find(v => v.name.includes('Xiaoxiao') || v.name.includes('晓晓')) || zhVoices[0];
+        select.value = defaultVoice.voiceURI;
+        // 注意：这里不自动设 currentVoice，等用户主动去选，绕过浏览器自动播放限制
+      }
+    }
+  }
+
+  // 浏览器的音色列表是异步加载的，需要监听变化
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+  // 立即执行一次
+  loadVoices();
+
+  // 监听下拉菜单的选择
+  select.addEventListener('change', (e) => {
+    const voices = window.speechSynthesis.getVoices();
+    currentVoice = voices.find(v => v.voiceURI === e.target.value);
+    
+    if (currentVoice) {
+      // 用户点击了下拉菜单，解锁语音权限
+      voiceEnabled = true;
+      localStorage.setItem('screenVoiceURI', currentVoice.voiceURI);
+      
+      // 试音
+      speak('语音播报已开启', 1);
+      
+      // 改变一下边框颜色提示已开启
+      select.style.borderColor = '#22c55e';
+      select.style.color = '#22c55e';
+    }
+  });
+}
+
+function speak(text, times = 1) {
+  if (!voiceEnabled || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  for (let i = 0; i < times; i++) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    if (currentVoice) u.voice = currentVoice;
+    u.rate = 0.95;   
+    u.pitch = 1.0;   
+    window.speechSynthesis.speak(u);
+  }
+}
+/* =============================================== */
+
 // 第一步：选学段
 function selectStage(stage) {
   currentStage = stage;
   $('#title-grade').textContent = `请选择【${stage}】的年级`;
-  
-  let grades = [];
-  if (stage === '小学') grades = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'];
-  else if (stage === '初中') grades = ['初一', '初二', '初三'];
-  else grades = ['高一', '高二', '高三'];
-
+  let grades = stage === '小学' ? ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'] : (stage === '初中' ? ['初一', '初二', '初三'] : ['高一', '高二', '高三']);
   $('#grid-grade').innerHTML = grades.map(g => `<button onclick="selectGrade('${g}')">${g}</button>`).join('');
   goToStep('grade');
 }
@@ -136,12 +220,8 @@ function selectStage(stage) {
 function selectGrade(grade) {
   currentGrade = grade;
   $('#title-class').textContent = `请选择【${currentStage} - ${grade}】的班级`;
-  
-  // 生成 1-15 班
   let classBtns = [];
-  for (let i = 1; i <= 15; i++) {
-    classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
-  }
+  for (let i = 1; i <= 15; i++) classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
   $('#grid-class').innerHTML = classBtns.join('');
   goToStep('class');
 }
@@ -149,16 +229,12 @@ function selectGrade(grade) {
 // 第三步：选班级并保存
 function selectClass(classNum) {
   const fullName = `${currentStage}${currentGrade}${classNum}班`;
-  const id = `${currentStage}_${currentGrade}_${classNum}`; // 唯一ID，例如：小学_一年级_1
-  
-  // 保存到本地，永久记住
+  const id = `${currentStage}_${currentGrade}_${classNum}`;
   localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
-  
   $('#picker').style.display = 'none';
   connectToClass(id, fullName);
 }
 
-// 页面切换控制
 function goToStep(step) {
   document.querySelectorAll('#picker .step').forEach(el => el.classList.remove('active'));
   $(`#step-${step}`).classList.add('active');
@@ -199,47 +275,6 @@ function onMessage(msg) {
     setTimeout(() => document.body.classList.remove('flash'), 1200);
   }
   speak(msg.text, msg.urgent ? 2 : 1);
-}
-
-function speak(text, times = 1) {
-  if (!voiceEnabled || !('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-
-  // 1. 获取浏览器所有可用的音色
-  const voices = window.speechSynthesis.getVoices();
-  
-  // 2. 智能挑选最自然的中文音色（按优先级排序）
-  // 优先“晓晓”（温柔女声，播音感最好），其次“云希”（阳光男声），再不行就找带“Neural”的
-  let selectedVoice = voices.find(v => v.name.includes('Xiaoxiao') || v.name.includes('晓晓'));
-  if (!selectedVoice) selectedVoice = voices.find(v => v.name.includes('Yunxi') || v.name.includes('云希'));
-  if (!selectedVoice) selectedVoice = voices.find(v => v.name.includes('Neural') && v.lang.includes('zh'));
-  // 如果没找到，就退回找任意一个中文音色
-  if (!selectedVoice) selectedVoice = voices.find(v => v.lang.includes('zh-CN'));
-
-  for (let i = 0; i < times; i++) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-CN';
-    
-    // 3. 应用我们选中的自然音色
-    if (selectedVoice) {
-      u.voice = selectedVoice;
-    }
-
-    // 4. 微调参数，进一步去除“机械感”
-    u.rate = 0.95;   // 语速稍微放慢一点点，显得更从容
-    u.pitch = 1.0;   // 音调保持正常，不要太高或太低
-    
-    window.speechSynthesis.speak(u);
-  }
-}
-
-function enableVoice() {
-  voiceEnabled = true;
-  speak('语音播报已开启');
-  const btn = $('#voiceBtn');
-  btn.textContent = '🔊 语音已开启';
-  btn.style.color = '#22c55e';
-  btn.style.borderColor = '#22c55e';
 }
 
 function setConn(ok) {
