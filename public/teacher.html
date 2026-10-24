@@ -44,6 +44,10 @@
   #recent .time{color:#94a3b8;font-size:12px;flex:none}
   #recent .txt{flex:1;word-break:break-word;line-height:1.5}
   #recent li.urgent{background:#fef2f2;color:#b91c1c}
+   /* 新增：消息状态样式 */
+  .status { font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-left: 8px; white-space: nowrap; }
+  .status-pending { background: #f1f5f9; color: #64748b; }
+  .status-acked { background: #dcfce7; color: #16a34a; font-weight: 600; }
   #recent .empty{color:#94a3b8;font-size:13px;justify-content:center}
 
   .toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,20px);background:#0f172a;color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:all .25s ease;z-index:100;max-width:90vw;box-shadow:0 10px 30px -10px rgba(15,23,42,.5);}
@@ -176,6 +180,16 @@ function connect() {
   });
   socket.on('disconnect', () => { setConn('off', '已断开'); updateSendState(); });
   socket.on('presence', onPresence);
+   // 新增：监听大屏的确认反馈
+  socket.on('message:acked', (messageId) => {
+    const msg = recent.find(m => m.id === messageId);
+    if (msg) {
+      msg.acked = true;
+      try { localStorage.setItem('recentMsgs', JSON.stringify(recent)); } catch {}
+      renderRecent(); 
+      toast('大屏已确认收到消息', 'ok');
+    }
+  });
 }
 
 function setConn(state, text) {
@@ -315,10 +329,13 @@ function restoreRecent() {
 function renderRecent() {
   const ul = $('#recent');
   if (!recent.length) { ul.innerHTML = '<li class="empty">暂无记录</li>'; return; }
-  ul.innerHTML = recent.map(m => {
+   ul.innerHTML = recent.map(m => {
+    const statusText = m.acked ? '✅ 已确认' : '⌛ 待确认';
+    const statusClass = m.acked ? 'status-acked' : 'status-pending';
     return `<li class="${m.urgent ? 'urgent' : ''}">
       <span class="time">${fmtTime(m.ts)}</span>
       <span class="txt">${escapeHtml(m.text)}</span>
+      <span class="status ${statusClass}">${statusText}</span>
     </li>`;
   }).join('');
 }
