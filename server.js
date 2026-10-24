@@ -46,6 +46,12 @@ io.on('connection', (socket) => {
   socket.on('message:send', (payload, ack) => {
     const { classId, text, urgent } = payload || {};
     if (!classId || !text) return ack?.({ ok: false, error: '参数不完整' });
+      // 新增：监听大屏发来的确认
+  socket.on('message:ack', (payload) => {
+    if (!payload.classId || !payload.messageId) return;
+    // 把确认信号转发给同一班级的其他客户端（也就是老师的手机）
+    socket.to(payload.classId).emit('message:acked', payload.messageId);
+  });
 
     const msg = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
