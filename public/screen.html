@@ -10,7 +10,7 @@
     font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
     display:flex;flex-direction:column;transition:background .2s}
   header{display:flex;justify-content:space-between;align-items:center;padding:20px 40px}
-  .brand{font-size:20px;font-weight:600;letter-spacing:.04em;color:#cbd5e1;cursor:pointer}
+  .brand{font-size:20px;font-weight:600;letter-spacing:.04em;color:#cbd5e1}
   .right{display:flex;align-items:center;gap:18px}
   .conn{display:flex;align-items:center;gap:8px;font-size:15px;color:#94a3b8}
   .dot{width:10px;height:10px;border-radius:50%;background:#f43f5e;transition:.2s}
@@ -18,7 +18,7 @@
   button.ghost{padding:10px 18px;border:1px solid #1e293b;border-radius:999px;background:#111a2e;
     color:#cbd5e1;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s}
   button.ghost:hover{border-color:#3b82f6;color:#fff}
-  button.ghost:disabled{opacity:.5;cursor:default}
+  
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center}
   #msg{font-size:clamp(40px,9vw,140px);font-weight:800;line-height:1.25;letter-spacing:.02em;
     max-width:95%;opacity:0;transform:translateY(24px);
@@ -26,17 +26,24 @@
   #msg.show{opacity:1;transform:none}
   #msg.idle{color:#334155;font-size:clamp(26px,4vw,54px)}
   #msg.urgent{color:#f87171;text-shadow:0 0 70px rgba(248,113,113,.4)}
+  
   .clock{position:fixed;right:40px;bottom:24px;font-size:18px;color:#475569;font-variant-numeric:tabular-nums}
   body.flash{animation:flash .55s 2}
   @keyframes flash{50%{background:#1f0b0b}}
+  
+  /* 三级联动选择器样式 */
   #picker{position:fixed;inset:0;background:#0b1220;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:30px;z-index:20}
   #picker h2{font-size:clamp(26px,4vw,44px);margin:0;font-weight:700}
+  #picker .step{display:none; flex-direction:column; align-items:center; width:100%;}
+  #picker .step.active{display:flex;}
   #picker .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
-    gap:16px;width:min(84vw,820px)}
+    gap:20px;width:min(84vw,1000px);margin-top:20px;}
   #picker button{padding:26px;font-size:26px;font-weight:700;border:2px solid #1e293b;
     border-radius:20px;background:#111a2e;color:#fff;cursor:pointer;font-family:inherit;transition:.15s}
-  #picker button:hover{border-color:#3b82f6;background:#16243f}
+  #picker button:hover{border-color:#3b82f6;background:#16243f;transform:scale(1.02)}
+  .back-btn{background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;margin-top:20px;}
+  .back-btn:hover{color:#fff;}
 </style>
 </head>
 <body>
@@ -56,50 +63,114 @@
 
 <div class="clock" id="clock"></div>
 
+<!-- 三级联动选择器 -->
 <div id="picker">
-  <h2>请选择本班教室</h2>
-  <div class="grid" id="pickerGrid"></div>
+  <div class="step active" id="step-stage">
+    <h2>请选择学段</h2>
+    <div class="grid">
+      <button onclick="selectStage('小学')">小学</button>
+      <button onclick="selectStage('初中')">初中</button>
+      <button onclick="selectStage('高中')">高中</button>
+    </div>
+  </div>
+
+  <div class="step" id="step-grade">
+    <h2 id="title-grade">请选择年级</h2>
+    <div class="grid" id="grid-grade"></div>
+    <button class="back-btn" onclick="goBack('stage')">← 返回学段选择</button>
+  </div>
+
+  <div class="step" id="step-class">
+    <h2 id="title-class">请选择班级</h2>
+    <div class="grid" id="grid-class"></div>
+    <button class="back-btn" onclick="goBack('grade')">← 返回年级选择</button>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 let socket = null;
-let classes = [];
-let classId = null;
 let voiceEnabled = false;
 
+// 临时选择变量
+let currentStage = '';
+let currentGrade = '';
+
+// 初始化
 init();
 
-async function init() {
-  try { classes = await (await fetch('/api/classes')).json(); } catch { classes = []; }
-  renderPicker();
+function init() {
   updateClock();
   setInterval(updateClock, 1000);
-
   $('#voiceBtn').addEventListener('click', enableVoice);
-  $('#switchBtn').addEventListener('click', () => { $('#picker').style.display = 'flex'; });
-  $('#brand').addEventListener('click', () => { $('#picker').style.display = 'flex'; });
-
-  // 记住上次选的班级
-  const saved = localStorage.getItem('screenClass');
-  if (saved && classes.some(c => c.id === saved)) selectClass(saved);
-}
-
-function renderPicker() {
-  $('#pickerGrid').innerHTML = classes
-    .map(c => `<button data-id="${c.id}">${c.name}</button>`).join('');
-  $('#pickerGrid').querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => selectClass(btn.dataset.id));
+  $('#switchBtn').addEventListener('click', () => {
+    $('#picker').style.display = 'flex';
+    goBack('stage'); // 重置到第一页
   });
+
+  // 检查本地是否已经保存过选择
+  const savedConfig = localStorage.getItem('screenConfig');
+  if (savedConfig) {
+    const config = JSON.parse(savedConfig);
+    $('#picker').style.display = 'none';
+    connectToClass(config.id, config.fullName);
+  }
 }
 
-function selectClass(id) {
-  classId = id;
-  localStorage.setItem('screenClass', id);
-  const cls = classes.find(c => c.id === id);
-  $('#brand').textContent = (cls ? cls.name : '') + ' · 课堂大屏';
+// 第一步：选学段
+function selectStage(stage) {
+  currentStage = stage;
+  $('#title-grade').textContent = `请选择【${stage}】的年级`;
+  
+  let grades = [];
+  if (stage === '小学') grades = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'];
+  else if (stage === '初中') grades = ['初一', '初二', '初三'];
+  else grades = ['高一', '高二', '高三'];
+
+  $('#grid-grade').innerHTML = grades.map(g => `<button onclick="selectGrade('${g}')">${g}</button>`).join('');
+  goToStep('grade');
+}
+
+// 第二步：选年级
+function selectGrade(grade) {
+  currentGrade = grade;
+  $('#title-class').textContent = `请选择【${currentStage} - ${grade}】的班级`;
+  
+  // 生成 1-15 班
+  let classBtns = [];
+  for (let i = 1; i <= 15; i++) {
+    classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
+  }
+  $('#grid-class').innerHTML = classBtns.join('');
+  goToStep('class');
+}
+
+// 第三步：选班级并保存
+function selectClass(classNum) {
+  const fullName = `${currentStage}${currentGrade}${classNum}班`;
+  const id = `${currentStage}_${currentGrade}_${classNum}`; // 唯一ID，例如：小学_一年级_1
+  
+  // 保存到本地，永久记住
+  localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
+  
   $('#picker').style.display = 'none';
+  connectToClass(id, fullName);
+}
+
+// 页面切换控制
+function goToStep(step) {
+  document.querySelectorAll('#picker .step').forEach(el => el.classList.remove('active'));
+  $(`#step-${step}`).classList.add('active');
+}
+function goBack(step) {
+  if (step === 'stage') { goToStep('stage'); }
+  else if (step === 'grade') { goToStep('grade'); }
+}
+
+// 连接服务器
+function connectToClass(classId, fullName) {
+  $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
 
   if (!socket) {
     socket = io();
@@ -116,12 +187,10 @@ function selectClass(id) {
 }
 
 function onMessage(msg) {
-  if (msg.classId !== classId) return;
-
   const el = $('#msg');
   el.classList.remove('show', 'urgent', 'idle');
   el.textContent = msg.text;
-  void el.offsetWidth; // 重排以重放动画
+  void el.offsetWidth;
   el.classList.add('show');
 
   if (msg.urgent) {
@@ -129,7 +198,6 @@ function onMessage(msg) {
     document.body.classList.add('flash');
     setTimeout(() => document.body.classList.remove('flash'), 1200);
   }
-
   speak(msg.text, msg.urgent ? 2 : 1);
 }
 
@@ -150,7 +218,8 @@ function enableVoice() {
   speak('语音播报已开启');
   const btn = $('#voiceBtn');
   btn.textContent = '🔊 语音已开启';
-  btn.disabled = true;
+  btn.style.color = '#22c55e';
+  btn.style.borderColor = '#22c55e';
 }
 
 function setConn(ok) {
