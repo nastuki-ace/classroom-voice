@@ -48,6 +48,14 @@
   .clock{position:fixed;right:40px;bottom:24px;font-size:18px;color:#475569;font-variant-numeric:tabular-nums}
   body.flash{animation:flash .55s 2}
   @keyframes flash{50%{background:#1f0b0b}}
+   /* 新增：确认按钮样式 */
+  #ackBtn {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    padding: 16px 48px; font-size: 24px; font-weight: 700; border-radius: 999px;
+    border: none; background: #22c55e; color: white; cursor: pointer;
+    box-shadow: 0 10px 30px -10px rgba(34,197,94,.8); display: none;
+    font-family: inherit; transition: transform .1s;
+  }
   
   /* 三级联动选择器样式 */
   #picker{position:fixed;inset:0;background:#0b1220;display:flex;flex-direction:column;
@@ -77,8 +85,10 @@
   </div>
 </header>
 
-<main>
+ <main>
   <div id="msg" class="idle">等待老师发送通知…</div>
+  <!-- 新增：确认按钮 -->
+  <button id="ackBtn">✅ 确认收到</button>
 </main>
 
 <div class="clock" id="clock"></div>
@@ -238,6 +248,8 @@ function onMessage(msg) {
   adjustFontSize(); // 先计算缩放，再显示
   
   el.classList.add('show');
+   document.getElementById('ackBtn').style.display = 'block';
+  window.currentMsgId = msg.id; 
 
   if (msg.urgent) {
     el.classList.add('urgent');
@@ -290,6 +302,13 @@ function connectToClass(classId, fullName) {
     socket.emit('join', { role: 'screen', classId });
   }
 }
+ document.getElementById('ackBtn').addEventListener('click', () => {
+  document.getElementById('ackBtn').style.display = 'none';
+  if (socket && window.currentMsgId) {
+    const config = JSON.parse(localStorage.getItem('screenConfig'));
+    socket.emit('message:ack', { classId: config.id, messageId: window.currentMsgId });
+  }
+});
 function setConn(ok) {
   $('#dot').classList.toggle('on', ok);
   $('#connText').textContent = ok ? '已连接' : '已断开';
