@@ -6,17 +6,18 @@
 <title>课堂大屏</title>
 <style>
   *{box-sizing:border-box}
-  body{margin:0;height:100vh;overflow:hidden;background:#0b1220;color:#fff;
+  body{
+    margin:0;height:100vh;overflow:hidden;background:#0b1220;color:#fff;
     font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-    display:flex;flex-direction:column;transition:background .2s}
-  header{display:flex;justify-content:space-between;align-items:center;padding:20px 40px}
+    display:flex;flex-direction:column;transition:background .2s;
+  }
+  header{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;flex-shrink:0}
   .brand{font-size:20px;font-weight:600;letter-spacing:.04em;color:#cbd5e1}
   .right{display:flex;align-items:center;gap:18px}
   .conn{display:flex;align-items:center;gap:8px;font-size:15px;color:#94a3b8}
   .dot{width:10px;height:10px;border-radius:50%;background:#f43f5e;transition:.2s}
   .dot.on{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.2)}
   
-  /* 按钮和下拉菜单样式 */
   button.ghost, select.ghost{
     padding:10px 18px;border:1px solid #1e293b;border-radius:999px;background:#111a2e;
     color:#cbd5e1;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;outline:none;
@@ -25,19 +26,22 @@
   select.ghost{max-width:200px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;}
   select.ghost option{background:#111a2e; color:#fff;}
   
-  main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center}
-  #msg{
-    /* 移除固定的 clamp，改由 JS 动态计算 */
-    font-size: 120px; 
-    font-weight:800;line-height:1.25;letter-spacing:.02em;
-    max-width:95%;opacity:0;transform:translateY(24px);
-    transition:opacity .4s cubic-bezier(.2,.7,.3,1),transform .4s cubic-bezier(.2,.7,.3,1),color .2s;
-    text-align: center;
-    word-wrap: break-word; /* 防止超长英文撑破屏幕 */
-    white-space: pre-wrap; /* 保留换行符 */
+  /* 核心修改：绝对居中容器，防止 flex 溢出裁切 */
+  main{
+    flex:1; position:relative; display:block; padding:40px; overflow:hidden;
   }
-  #msg.show{opacity:1;transform:none}
-  #msg.idle{color:#334155;font-size:clamp(26px,4vw,54px)}
+  
+  #msg{
+    position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
+    width:100%; text-align:center;
+    font-weight:800; line-height:1.2; letter-spacing:.02em;
+    opacity:0;
+    transition:opacity .4s, color .2s;
+    word-wrap:break-word; white-space:pre-wrap;
+    padding: 0 40px;
+  }
+  #msg.show{opacity:1}
+  #msg.idle{color:#334155}
   #msg.urgent{color:#f87171;text-shadow:0 0 70px rgba(248,113,113,.4)}
   
   .clock{position:fixed;right:40px;bottom:24px;font-size:18px;color:#475569;font-variant-numeric:tabular-nums}
@@ -65,7 +69,6 @@
   <div class="brand" id="brand">课堂大屏</div>
   <div class="right">
     <button class="ghost" id="switchBtn">切换班级</button>
-    <!-- 音色选择下拉菜单 -->
     <select class="ghost" id="voiceSelect">
       <option value="">🔊 请选择音色...</option>
     </select>
@@ -89,13 +92,11 @@
       <button onclick="selectStage('高中')">高中</button>
     </div>
   </div>
-
   <div class="step" id="step-grade">
     <h2 id="title-grade">请选择年级</h2>
     <div class="grid" id="grid-grade"></div>
     <button class="back-btn" onclick="goBack('stage')">← 返回学段选择</button>
   </div>
-
   <div class="step" id="step-class">
     <h2 id="title-class">请选择班级</h2>
     <div class="grid" id="grid-class"></div>
@@ -108,28 +109,22 @@
 const $ = s => document.querySelector(s);
 let socket = null;
 let voiceEnabled = false;
-let currentVoice = null; // 当前选中的音色对象
+let currentVoice = null;
 
-// 临时选择变量
 let currentStage = '';
 let currentGrade = '';
 
-// 初始化
 init();
 
 function init() {
   updateClock();
   setInterval(updateClock, 1000);
-  
   $('#switchBtn').addEventListener('click', () => {
     $('#picker').style.display = 'flex';
     goBack('stage');
   });
-
-  // 加载并处理浏览器音色
   initVoices();
 
-  // 检查本地是否已经保存过选择
   const savedConfig = localStorage.getItem('screenConfig');
   if (savedConfig) {
     const config = JSON.parse(savedConfig);
@@ -138,64 +133,45 @@ function init() {
   }
 }
 
-/* ================= 语音相关逻辑 ================= */
+/* ================= 语音相关 ================= */
 function initVoices() {
   const select = $('#voiceSelect');
-  
   function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
-    // 筛选中文音色 (包含 zh 或 cmn)
     const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('cmn'));
-    
-    // 避免重复添加
     if (zhVoices.length > 0 && select.options.length <= 1) {
       zhVoices.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v.voiceURI;
-        // 清理一下太长的英文名字，让界面好看点
         let displayName = v.name.replace('Microsoft ', '').replace(' Online (Natural)', '');
         opt.textContent = displayName;
         select.appendChild(opt);
       });
-
-      // 恢复上次的选择
       const savedVoiceURI = localStorage.getItem('screenVoiceURI');
       if (savedVoiceURI && zhVoices.some(v => v.voiceURI === savedVoiceURI)) {
         select.value = savedVoiceURI;
         currentVoice = zhVoices.find(v => v.voiceURI === savedVoiceURI);
         voiceEnabled = true;
+        select.style.borderColor = '#22c55e';
+        select.style.color = '#22c55e';
       } else {
-        // 默认选中带有 "Xiaoxiao" 或 "晓晓" 的，否则选第一个
         const defaultVoice = zhVoices.find(v => v.name.includes('Xiaoxiao') || v.name.includes('晓晓')) || zhVoices[0];
         select.value = defaultVoice.voiceURI;
-        // 注意：这里不自动设 currentVoice，等用户主动去选，绕过浏览器自动播放限制
       }
     }
   }
-
-  // 浏览器的音色列表是异步加载的，需要监听变化
-  if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = loadVoices;
-  }
-  // 立即执行一次
+  if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
   loadVoices();
 
-  // 监听下拉菜单的选择
   select.addEventListener('change', (e) => {
     const voices = window.speechSynthesis.getVoices();
     currentVoice = voices.find(v => v.voiceURI === e.target.value);
-    
     if (currentVoice) {
-      // 用户点击了下拉菜单，解锁语音权限
       voiceEnabled = true;
       localStorage.setItem('screenVoiceURI', currentVoice.voiceURI);
-      
-      // 试音
-      speak('语音播报已开启', 1);
-      
-      // 改变一下边框颜色提示已开启
       select.style.borderColor = '#22c55e';
       select.style.color = '#22c55e';
+      speak('语音播报已开启', 1);
     }
   });
 }
@@ -207,96 +183,54 @@ function speak(text, times = 1) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-CN';
     if (currentVoice) u.voice = currentVoice;
-    u.rate = 0.95;   
-    u.pitch = 1.0;   
+    u.rate = 0.95;
+    u.pitch = 1.0;
     window.speechSynthesis.speak(u);
   }
 }
-/* =============================================== */
 
-// 第一步：选学段
-function selectStage(stage) {
-  currentStage = stage;
-  $('#title-grade').textContent = `请选择【${stage}】的年级`;
-  let grades = stage === '小学' ? ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'] : (stage === '初中' ? ['初一', '初二', '初三'] : ['高一', '高二', '高三']);
-  $('#grid-grade').innerHTML = grades.map(g => `<button onclick="selectGrade('${g}')">${g}</button>`).join('');
-  goToStep('grade');
-}
-
-// 第二步：选年级
-function selectGrade(grade) {
-  currentGrade = grade;
-  $('#title-class').textContent = `请选择【${currentStage} - ${grade}】的班级`;
-  let classBtns = [];
-  for (let i = 1; i <= 15; i++) classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
-  $('#grid-class').innerHTML = classBtns.join('');
-  goToStep('class');
-}
-
-// 第三步：选班级并保存
-function selectClass(classNum) {
-  const fullName = `${currentStage}${currentGrade}${classNum}班`;
-  const id = `${currentStage}_${currentGrade}_${classNum}`;
-  localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
-  $('#picker').style.display = 'none';
-  connectToClass(id, fullName);
-}
-
-function goToStep(step) {
-  document.querySelectorAll('#picker .step').forEach(el => el.classList.remove('active'));
-  $(`#step-${step}`).classList.add('active');
-}
-function goBack(step) {
-  if (step === 'stage') { goToStep('stage'); }
-  else if (step === 'grade') { goToStep('grade'); }
-}
-
-// 连接服务器
-function connectToClass(classId, fullName) {
-  $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
-
-  if (!socket) {
-    socket = io();
-    socket.on('connect', () => {
-      setConn(true);
-      socket.emit('join', { role: 'screen', classId });
-    });
-    socket.on('disconnect', () => setConn(false));
-    socket.on('connect_error', () => setConn(false));
-    socket.on('message:new', onMessage);
-  } else {
-    socket.emit('join', { role: 'screen', classId });
-  }
-}
-// 动态调整字体大小
+/* ================= 字体自适应核心算法 ================= */
 function adjustFontSize() {
   const msgEl = document.getElementById('msg');
   const mainEl = document.querySelector('main');
   
-  // 获取容器可用高度和宽度（减去边距）
-  const maxWidth = mainEl.clientWidth - 80;
+  // 获取容器最大宽高（减去 padding 和一点安全余量）
+  const maxWidth = mainEl.clientWidth - 100;
   const maxHeight = mainEl.clientHeight - 80;
   
-  // 初始字体大小（最大字号）
-  let fontSize = 140; 
-  msgEl.style.fontSize = fontSize + 'px';
-  
-  // 如果超出范围，就不断缩小字体，直到完全包裹在里面为止
-  while ((msgEl.offsetHeight > maxHeight || msgEl.offsetWidth > maxWidth) && fontSize > 24) {
-    fontSize -= 4; // 每次缩小 4px
-    msgEl.style.fontSize = fontSize + 'px';
+  // 二分法寻找最完美的字号
+  let low = 20;
+  let high = 160;
+  let bestSize = 20;
+
+  while (low <= high) {
+    let mid = Math.floor((low + high) / 2);
+    msgEl.style.fontSize = mid + 'px';
+    
+    // 强制浏览器重绘，以便准确获取高度
+    const currentWidth = msgEl.offsetWidth;
+    const currentHeight = msgEl.offsetHeight;
+
+    if (currentWidth <= maxWidth && currentHeight <= maxHeight) {
+      bestSize = mid; // 这个字号装得下，记录一下，并尝试更大的字号
+      low = mid + 1;
+    } else {
+      high = mid - 1; // 装不下，尝试更小的字号
+    }
   }
+  
+  // 应用最终计算出的最佳字号
+  msgEl.style.fontSize = bestSize + 'px';
 }
- 
+
+/* ================= 消息处理 ================= */
 function onMessage(msg) {
   const el = $('#msg');
   el.classList.remove('show', 'urgent', 'idle');
   el.textContent = msg.text;
-  void el.offsetWidth; 
+  void el.offsetWidth;
   
-  // 👇 新增这一行：在显示前，让字体自适应
-  adjustFontSize(); 
-  // 👆
+  adjustFontSize(); // 先计算缩放，再显示
   
   el.classList.add('show');
 
@@ -308,15 +242,56 @@ function onMessage(msg) {
   speak(msg.text, msg.urgent ? 2 : 1);
 }
 
+/* ================= 选择器逻辑 ================= */
+function selectStage(stage) {
+  currentStage = stage;
+  $('#title-grade').textContent = `请选择【${stage}】的年级`;
+  let grades = stage === '小学' ? ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级'] : (stage === '初中' ? ['初一', '初二', '初三'] : ['高一', '高二', '高三']);
+  $('#grid-grade').innerHTML = grades.map(g => `<button onclick="selectGrade('${g}')">${g}</button>`).join('');
+  goToStep('grade');
+}
+function selectGrade(grade) {
+  currentGrade = grade;
+  $('#title-class').textContent = `请选择【${currentStage} - ${grade}】的班级`;
+  let classBtns = [];
+  for (let i = 1; i <= 15; i++) classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
+  $('#grid-class').innerHTML = classBtns.join('');
+  goToStep('class');
+}
+function selectClass(classNum) {
+  const fullName = `${currentStage}${currentGrade}${classNum}班`;
+  const id = `${currentStage}_${currentGrade}_${classNum}`;
+  localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
+  $('#picker').style.display = 'none';
+  connectToClass(id, fullName);
+}
+function goToStep(step) {
+  document.querySelectorAll('#picker .step').forEach(el => el.classList.remove('active'));
+  $(`#step-${step}`).classList.add('active');
+}
+function goBack(step) {
+  if (step === 'stage') { goToStep('stage'); }
+  else if (step === 'grade') { goToStep('grade'); }
+}
+function connectToClass(classId, fullName) {
+  $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
+  if (!socket) {
+    socket = io();
+    socket.on('connect', () => { setConn(true); socket.emit('join', { role: 'screen', classId }); });
+    socket.on('disconnect', () => setConn(false));
+    socket.on('connect_error', () => setConn(false));
+    socket.on('message:new', onMessage);
+  } else {
+    socket.emit('join', { role: 'screen', classId });
+  }
+}
 function setConn(ok) {
   $('#dot').classList.toggle('on', ok);
   $('#connText').textContent = ok ? '已连接' : '已断开';
 }
-
 function updateClock() {
   const d = new Date();
-  $('#clock').textContent =
-    d.toLocaleDateString('zh-CN') + ' ' +
+  $('#clock').textContent = d.toLocaleDateString('zh-CN') + ' ' +
     String(d.getHours()).padStart(2, '0') + ':' +
     String(d.getMinutes()).padStart(2, '0') + ':' +
     String(d.getSeconds()).padStart(2, '0');
