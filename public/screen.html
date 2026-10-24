@@ -204,11 +204,31 @@ function onMessage(msg) {
 function speak(text, times = 1) {
   if (!voiceEnabled || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
+
+  // 1. 获取浏览器所有可用的音色
+  const voices = window.speechSynthesis.getVoices();
+  
+  // 2. 智能挑选最自然的中文音色（按优先级排序）
+  // 优先“晓晓”（温柔女声，播音感最好），其次“云希”（阳光男声），再不行就找带“Neural”的
+  let selectedVoice = voices.find(v => v.name.includes('Xiaoxiao') || v.name.includes('晓晓'));
+  if (!selectedVoice) selectedVoice = voices.find(v => v.name.includes('Yunxi') || v.name.includes('云希'));
+  if (!selectedVoice) selectedVoice = voices.find(v => v.name.includes('Neural') && v.lang.includes('zh'));
+  // 如果没找到，就退回找任意一个中文音色
+  if (!selectedVoice) selectedVoice = voices.find(v => v.lang.includes('zh-CN'));
+
   for (let i = 0; i < times; i++) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-CN';
-    u.rate = 0.95;
-    u.pitch = 1;
+    
+    // 3. 应用我们选中的自然音色
+    if (selectedVoice) {
+      u.voice = selectedVoice;
+    }
+
+    // 4. 微调参数，进一步去除“机械感”
+    u.rate = 0.95;   // 语速稍微放慢一点点，显得更从容
+    u.pitch = 1.0;   // 音调保持正常，不要太高或太低
+    
     window.speechSynthesis.speak(u);
   }
 }
