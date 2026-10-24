@@ -31,14 +31,15 @@
     flex:1; position:relative; display:block; padding:40px; overflow:hidden;
   }
   
-  #msg{
+    #msg{
     position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
-    width:100%; text-align:center;
+    width: max-content; /* 关键修复：宽度由文字内容撑开 */
+    max-width: 92vw;    /* 限制最大宽度，长文字会自动换行 */
+    text-align:center;
     font-weight:800; line-height:1.2; letter-spacing:.02em;
     opacity:0;
     transition:opacity .4s, color .2s;
     word-wrap:break-word; white-space:pre-wrap;
-    padding: 0 40px;
   }
   #msg.show{opacity:1}
   #msg.idle{color:#334155}
@@ -194,32 +195,36 @@ function adjustFontSize() {
   const msgEl = document.getElementById('msg');
   const mainEl = document.querySelector('main');
   
-  // 获取容器最大宽高（减去 padding 和一点安全余量）
-  const maxWidth = mainEl.clientWidth - 100;
+  // 获取实际可用的宽高（减去安全边距）
+  const maxWidth = mainEl.clientWidth - 80;
   const maxHeight = mainEl.clientHeight - 80;
   
-  // 二分法寻找最完美的字号
+  // 设置最大宽度，防止长文本超出屏幕
+  msgEl.style.width = 'max-content';
+  msgEl.style.maxWidth = maxWidth + 'px';
+  
   let low = 20;
-  let high = 160;
+  let high = 200; // 短文字最大可以放到 200px
   let bestSize = 20;
 
   while (low <= high) {
     let mid = Math.floor((low + high) / 2);
     msgEl.style.fontSize = mid + 'px';
     
-    // 强制浏览器重绘，以便准确获取高度
-    const currentWidth = msgEl.offsetWidth;
-    const currentHeight = msgEl.offsetHeight;
-
-    if (currentWidth <= maxWidth && currentHeight <= maxHeight) {
-      bestSize = mid; // 这个字号装得下，记录一下，并尝试更大的字号
-      low = mid + 1;
+    // 强制重绘以获取准确尺寸
+    void msgEl.offsetWidth; 
+    
+    // 判断当前字号是否能够容纳文字
+    const isOverflow = msgEl.offsetWidth > maxWidth || msgEl.offsetHeight > maxHeight;
+    
+    if (!isOverflow) {
+      bestSize = mid; 
+      low = mid + 1; // 如果能装下，尝试放大
     } else {
-      high = mid - 1; // 装不下，尝试更小的字号
+      high = mid - 1; // 如果装不下，尝试缩小
     }
   }
   
-  // 应用最终计算出的最佳字号
   msgEl.style.fontSize = bestSize + 'px';
 }
 
