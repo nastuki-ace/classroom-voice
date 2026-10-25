@@ -17,13 +17,14 @@
   button.ghost:hover, select.ghost:hover{border-color:#3b82f6;color:#fff}
   select.ghost{max-width:200px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;}
   select.ghost option{background:#111a2e; color:#fff;}
+  
   main{flex:1; position:relative; display:block; padding:40px; overflow:hidden;}
   #msg{position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);width: max-content;max-width: 92vw;text-align:center;font-weight:800; line-height:1.2; letter-spacing:.02em;opacity:0;transition:opacity .4s, color .2s;word-wrap:break-word; white-space:pre-wrap;}
   #msg.show{opacity:1}
   #msg.idle{color:#334155}
   #msg.urgent{color:#f87171;text-shadow:0 0 70px rgba(248,113,113,.4)}
   
-  /* 优化后的按钮 */
+  /* 确认按钮：玻璃拟态 */
   #ackBtn{position: absolute;bottom: 60px;left: 50%;transform: translateX(-50%);padding: 16px 48px;font-size: 24px;font-weight: 700;border-radius: 16px;background: rgba(34, 197, 94, 0.1);color: #4ade80;border: 1px solid rgba(34, 197, 94, 0.3);backdrop-filter: blur(10px);cursor: pointer;box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);display: none;font-family: inherit; transition: all 0.2s ease;letter-spacing: 0.05em;}
   #ackBtn:hover{background: rgba(34, 197, 94, 0.2);border-color: rgba(34, 197, 94, 0.6);box-shadow: 0 8px 32px rgba(34, 197, 94, 0.2);}
   #ackBtn:active{transform: translateX(-50%) scale(0.95);}
@@ -32,6 +33,8 @@
   .clock{position:fixed;right:40px;bottom:24px;font-size:18px;color:#475569;font-variant-numeric:tabular-nums}
   body.flash{animation:flash .55s 2}
   @keyframes flash{50%{background:#1f0b0b}}
+  
+  /* 选择器样式 */
   #picker{position:fixed;inset:0;background:#0b1220;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;z-index:20}
   #picker h2{font-size:clamp(26px,4vw,44px);margin:0;font-weight:700}
   #picker .step{display:none; flex-direction:column; align-items:center; width:100%;}
@@ -44,6 +47,7 @@
 </style>
 </head>
 <body>
+
 <header>
   <div class="brand" id="brand">课堂大屏</div>
   <div class="right">
@@ -52,13 +56,16 @@
     <div class="conn"><span class="dot" id="dot"></span><span id="connText">未连接</span></div>
   </div>
 </header>
+
 <main>
   <div id="msg" class="idle">等待老师发送通知…</div>
   <button id="ackBtn">✅ 确认收到</button>
 </main>
+
 <div class="clock" id="clock"></div>
 
 <div id="picker">
+  <!-- 第1步：选学校 -->
   <div class="step active" id="step-school">
     <h2>请选择或输入学校</h2>
     <div style="margin-top:20px; display:flex; gap:10px;">
@@ -66,6 +73,8 @@
       <button onclick="confirmSchool()" style="padding:16px 30px; font-size:20px;">确定</button>
     </div>
   </div>
+  
+  <!-- 第2步：选学段 -->
   <div class="step" id="step-stage">
     <h2>请选择学段</h2>
     <div class="grid">
@@ -75,11 +84,15 @@
     </div>
     <button class="back-btn" onclick="goBack('school')">← 返回学校选择</button>
   </div>
+  
+  <!-- 第3步：选年级 -->
   <div class="step" id="step-grade">
     <h2 id="title-grade">请选择年级</h2>
     <div class="grid" id="grid-grade"></div>
     <button class="back-btn" onclick="goBack('stage')">← 返回学段选择</button>
   </div>
+  
+  <!-- 第4步：选班级 -->
   <div class="step" id="step-class">
     <h2 id="title-class">请选择班级</h2>
     <div class="grid" id="grid-class"></div>
@@ -98,13 +111,22 @@ let currentSchool = '';
 let currentStage = '';
 let currentGrade = '';
 
+// 初始化
 init();
 
 function init() {
-  updateClock(); setInterval(updateClock, 1000);
-  $('#switchBtn').addEventListener('click', () => { $('#picker').style.display = 'flex'; goBack('school'); });
+  updateClock();
+  setInterval(updateClock, 1000);
+  
+  $('#switchBtn').addEventListener('click', () => {
+    $('#picker').style.display = 'flex';
+    goBack('school');
+  });
+
   initVoices();
-  const savedConfig = localStorage.getItem('screenConfig');
+
+  // ⚠️ 注意：这里的缓存名字改成了 V3，会强制清空之前的旧记忆！
+  const savedConfig = localStorage.getItem('screenConfigV3');
   if (savedConfig) {
     const config = JSON.parse(savedConfig);
     $('#picker').style.display = 'none';
@@ -112,6 +134,7 @@ function init() {
   }
 }
 
+// 选学校
 function confirmSchool() {
   const val = document.getElementById('schoolInput').value.trim();
   if (!val) return alert('请输入学校名称');
@@ -119,17 +142,26 @@ function confirmSchool() {
   goToStep('stage');
 }
 
-/* 语音 */
+// 语音相关
 function initVoices() {
   const select = $('#voiceSelect');
   function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
     const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('cmn'));
     if (zhVoices.length > 0 && select.options.length <= 1) {
-      zhVoices.forEach(v => { const opt = document.createElement('option'); opt.value = v.voiceURI; opt.textContent = v.name.replace('Microsoft ', '').replace(' Online (Natural)', ''); select.appendChild(opt); });
+      zhVoices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.voiceURI;
+        opt.textContent = v.name.replace('Microsoft ', '').replace(' Online (Natural)', '');
+        select.appendChild(opt);
+      });
       const savedVoiceURI = localStorage.getItem('screenVoiceURI');
       if (savedVoiceURI && zhVoices.some(v => v.voiceURI === savedVoiceURI)) {
-        select.value = savedVoiceURI; currentVoice = zhVoices.find(v => v.voiceURI === savedVoiceURI); voiceEnabled = true; select.style.borderColor = '#22c55e'; select.style.color = '#22c55e';
+        select.value = savedVoiceURI;
+        currentVoice = zhVoices.find(v => v.voiceURI === savedVoiceURI);
+        voiceEnabled = true;
+        select.style.borderColor = '#22c55e';
+        select.style.color = '#22c55e';
       } else {
         select.value = (zhVoices.find(v => v.name.includes('Xiaoxiao') || v.name.includes('晓晓')) || zhVoices[0]).voiceURI;
       }
@@ -137,12 +169,15 @@ function initVoices() {
   }
   if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
   loadVoices();
+
   select.addEventListener('change', (e) => {
     const voices = window.speechSynthesis.getVoices();
     currentVoice = voices.find(v => v.voiceURI === e.target.value);
     if (currentVoice) {
-      voiceEnabled = true; localStorage.setItem('screenVoiceURI', currentVoice.voiceURI);
-      select.style.borderColor = '#22c55e'; select.style.color = '#22c55e';
+      voiceEnabled = true;
+      localStorage.setItem('screenVoiceURI', currentVoice.voiceURI);
+      select.style.borderColor = '#22c55e';
+      select.style.color = '#22c55e';
       speak('语音播报已开启', 1);
     }
   });
@@ -153,26 +188,38 @@ function speak(text, times = 1) {
   window.speechSynthesis.cancel();
   for (let i = 0; i < times; i++) {
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-CN'; if (currentVoice) u.voice = currentVoice;
-    u.rate = 0.95; u.pitch = 1.0; window.speechSynthesis.speak(u);
+    u.lang = 'zh-CN';
+    if (currentVoice) u.voice = currentVoice;
+    u.rate = 0.95;
+    u.pitch = 1.0;
+    window.speechSynthesis.speak(u);
   }
 }
 
+// 字体自适应
 function adjustFontSize() {
   const msgEl = document.getElementById('msg');
   const mainEl = document.querySelector('main');
   const maxWidth = mainEl.clientWidth - 80;
   const maxHeight = mainEl.clientHeight - 80;
-  msgEl.style.width = 'max-content'; msgEl.style.maxWidth = maxWidth + 'px';
+  msgEl.style.width = 'max-content';
+  msgEl.style.maxWidth = maxWidth + 'px';
   let low = 20, high = 200, bestSize = 20;
   while (low <= high) {
     let mid = Math.floor((low + high) / 2);
-    msgEl.style.fontSize = mid + 'px'; void msgEl.offsetWidth; 
-    if (msgEl.offsetWidth <= maxWidth && msgEl.offsetHeight <= maxHeight) { bestSize = mid; low = mid + 1; } else { high = mid - 1; }
+    msgEl.style.fontSize = mid + 'px';
+    void msgEl.offsetWidth; 
+    if (msgEl.offsetWidth <= maxWidth && msgEl.offsetHeight <= maxHeight) {
+      bestSize = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
   }
   msgEl.style.fontSize = bestSize + 'px';
 }
 
+// 接收消息
 function onMessage(msg) {
   const el = $('#msg');
   el.classList.remove('show', 'urgent', 'idle');
@@ -182,19 +229,30 @@ function onMessage(msg) {
   el.classList.add('show');
   document.getElementById('ackBtn').style.display = 'block';
   window.currentMsgId = msg.id;
-  if (msg.urgent) { el.classList.add('urgent'); document.body.classList.add('flash'); setTimeout(() => document.body.classList.remove('flash'), 1200); }
+  if (msg.urgent) {
+    el.classList.add('urgent');
+    document.body.classList.add('flash');
+    setTimeout(() => document.body.classList.remove('flash'), 1200);
+  }
   speak(msg.text, msg.urgent ? 2 : 1);
 }
 
+// 确认按钮事件
 document.getElementById('ackBtn').addEventListener('click', function() {
-  this.classList.add('clicked'); this.textContent = '✅ 已确认';
+  this.classList.add('clicked');
+  this.textContent = '✅ 已确认';
   if (socket && window.currentMsgId) {
-    const config = JSON.parse(localStorage.getItem('screenConfig'));
+    const config = JSON.parse(localStorage.getItem('screenConfigV3'));
     socket.emit('message:ack', { classId: config.id, messageId: window.currentMsgId });
   }
-  setTimeout(() => { this.style.display = 'none'; this.classList.remove('clicked'); this.textContent = '✅ 确认收到'; }, 800);
+  setTimeout(() => {
+    this.style.display = 'none';
+    this.classList.remove('clicked');
+    this.textContent = '✅ 确认收到';
+  }, 800);
 });
 
+// 选学段
 function selectStage(stage) {
   currentStage = stage;
   $('#title-grade').textContent = `请选择【${stage}】的年级`;
@@ -202,21 +260,28 @@ function selectStage(stage) {
   $('#grid-grade').innerHTML = grades.map(g => `<button onclick="selectGrade('${g}')">${g}</button>`).join('');
   goToStep('grade');
 }
+
+// 选年级（Bug 已修复）
 function selectGrade(grade) {
   currentGrade = grade;
-  $('#title-class').textContent = `请选择【${stage} - ${grade}】的班级`;
+  // 这里曾经写错成 stage，现在已修复为 currentStage
+  $('#title-class').textContent = `请选择【${currentStage} - ${grade}】的班级`;
   let classBtns = [];
   for (let i = 1; i <= 15; i++) classBtns.push(`<button onclick="selectClass(${i})">${i} 班</button>`);
   $('#grid-class').innerHTML = classBtns.join('');
   goToStep('class');
 }
+
+// 选班级
 function selectClass(classNum) {
   const fullName = `${currentSchool} ${currentStage}${currentGrade}${classNum}班`; 
   const id = `${currentSchool}_${currentStage}_${currentGrade}_${classNum}`;
-  localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
+  // 使用新缓存名 V3
+  localStorage.setItem('screenConfigV3', JSON.stringify({ id, fullName }));
   $('#picker').style.display = 'none';
   connectToClass(id, fullName);
 }
+
 function goToStep(step) {
   document.querySelectorAll('#picker .step').forEach(el => el.classList.remove('active'));
   $(`#step-${step}`).classList.add('active');
@@ -227,18 +292,36 @@ function goBack(step) {
   else if (step === 'grade') { goToStep('grade'); }
 }
 
+// 连接服务器
 function connectToClass(classId, fullName) {
   $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
   if (!socket) {
     socket = io();
-    socket.on('connect', () => { setConn(true); socket.emit('join', { role: 'screen', classId }); });
+    socket.on('connect', () => {
+      setConn(true);
+      socket.emit('join', { role: 'screen', classId });
+    });
     socket.on('disconnect', () => setConn(false));
     socket.on('connect_error', () => setConn(false));
     socket.on('message:new', onMessage);
-  } else { socket.emit('join', { role: 'screen', classId }); }
+  } else {
+    socket.emit('join', { role: 'screen', classId });
+  }
 }
-function setConn(ok) { $('#dot').classList.toggle('on', ok); $('#connText').textContent = ok ? '已连接' : '已断开'; }
-function updateClock() { const d = new Date(); $('#clock').textContent = d.toLocaleDateString('zh-CN') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0'); }
+
+function setConn(ok) {
+  $('#dot').classList.toggle('on', ok);
+  $('#connText').textContent = ok ? '已连接' : '已断开';
+}
+
+function updateClock() {
+  const d = new Date();
+  $('#clock').textContent =
+    d.toLocaleDateString('zh-CN') + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0') + ':' +
+    String(d.getSeconds()).padStart(2, '0');
+}
 </script>
 </body>
 </html>
