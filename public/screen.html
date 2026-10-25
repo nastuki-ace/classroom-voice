@@ -122,7 +122,15 @@
 
 <!-- 三级联动选择器 -->
 <div id="picker">
-  <div class="step active" id="step-stage">
+   <!-- 新增：选学校 -->
+  <div class="step active" id="step-school">
+    <h2>请选择或输入学校</h2>
+    <div style="margin-top:20px; display:flex; gap:10px;">
+      <input type="text" id="schoolInput" placeholder="输入学校简称，如：实验小学" style="padding:16px; font-size:20px; border-radius:12px; border:2px solid #1e293b; background:#111a2e; color:#fff; width:300px; text-align:center;">
+      <button onclick="confirmSchool()" style="padding:16px 30px; font-size:20px;">确定</button>
+    </div>
+  </div>
+  <div class="step" id="step-stage">
     <h2>请选择学段</h2>
     <div class="grid">
       <button onclick="selectStage('小学')">小学</button>
@@ -150,6 +158,15 @@ let voiceEnabled = false;
 let currentVoice = null;
 
 let currentStage = '';
+
+ let currentSchool = ''; 
+
+function confirmSchool() {
+  const val = document.getElementById('schoolInput').value.trim();
+  if (!val) return alert('请输入学校名称');
+  currentSchool = val;
+  goToStep('stage'); 
+}
 let currentGrade = '';
 
 init();
@@ -303,8 +320,9 @@ function selectGrade(grade) {
   goToStep('class');
 }
 function selectClass(classNum) {
-  const fullName = `${currentStage}${currentGrade}${classNum}班`;
-  const id = `${currentStage}_${currentGrade}_${classNum}`;
+  const fullName = `${currentSchool} ${currentStage}${currentGrade}${classNum}班`; 
+  const id = `${currentSchool}_${currentStage}_${currentGrade}_${classNum}`; 
+  // 下面的代码保持原样...
   localStorage.setItem('screenConfig', JSON.stringify({ id, fullName }));
   $('#picker').style.display = 'none';
   connectToClass(id, fullName);
@@ -318,7 +336,7 @@ function goBack(step) {
   else if (step === 'grade') { goToStep('grade'); }
 }
 function connectToClass(classId, fullName) {
-  $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
+    $('#brand').innerHTML = `📺 当前教室：<span style="color:#3b82f6; font-size:1.2em; font-weight:900;">${fullName}</span>`;
   if (!socket) {
     socket = io();
     socket.on('connect', () => { setConn(true); socket.emit('join', { role: 'screen', classId }); });
