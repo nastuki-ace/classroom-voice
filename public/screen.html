@@ -329,13 +329,25 @@ function connectToClass(classId, fullName) {
     socket.emit('join', { role: 'screen', classId });
   }
 }
- document.getElementById('ackBtn').addEventListener('click', () => {
-  document.getElementById('ackBtn').style.display = 'none';
+ document.getElementById('ackBtn').addEventListener('click', function() {
+  // 1. 改变按钮外观，给出视觉反馈
+  this.classList.add('clicked');
+  this.textContent = '✅ 已确认';
+  
+  // 2. 发送确认信号
   if (socket && window.currentMsgId) {
     const config = JSON.parse(localStorage.getItem('screenConfig'));
     socket.emit('message:ack', { classId: config.id, messageId: window.currentMsgId });
   }
+
+  // 3. 延迟 800 毫秒后隐藏按钮，并恢复初始状态
+  setTimeout(() => {
+    this.style.display = 'none';
+    this.classList.remove('clicked');
+    this.textContent = '✅ 确认收到';
+  }, 800);
 });
+ 
 function setConn(ok) {
   $('#dot').classList.toggle('on', ok);
   $('#connText').textContent = ok ? '已连接' : '已断开';
