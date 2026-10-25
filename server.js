@@ -9,10 +9,10 @@ const io = new Server(server);
 
 // 班级列表：把这里改成你学校的真实班级
 const CLASSES = [
-  { id: 'class1', name: '一年级2班' },
-  { id: 'class2', name: '一年级5班' },
-  { id: 'class3', name: '二年级3班' },
-  { id: 'class4', name: '二年级8班' }
+  { id: 'class1', name: '一年级1班' },
+  { id: 'class2', name: '一年级2班' },
+  { id: 'class3', name: '二年级1班' },
+  { id: 'class4', name: '三年级1班' }
 ];
 
 const screens = new Map();
@@ -46,12 +46,6 @@ io.on('connection', (socket) => {
   socket.on('message:send', (payload, ack) => {
     const { classId, text, urgent } = payload || {};
     if (!classId || !text) return ack?.({ ok: false, error: '参数不完整' });
-      // 新增：监听大屏发来的确认
-  socket.on('message:ack', (payload) => {
-    if (!payload.classId || !payload.messageId) return;
-    // 把确认信号转发给同一班级的其他客户端（也就是老师的手机）
-    socket.to(payload.classId).emit('message:acked', payload.messageId);
-  });
 
     const msg = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -63,6 +57,13 @@ io.on('connection', (socket) => {
     io.to(classId).emit('message:new', msg);
     ack?.({ ok: true, msg });
   });
+
+  // 👇 新增：监听大屏发来的确认 👇
+  socket.on('message:ack', (payload) => {
+    if (!payload.classId || !payload.messageId) return;
+    socket.to(payload.classId).emit('message:acked', payload.messageId);
+  });
+  // 👆 结束 👆
 
   socket.on('disconnect', () => {
     const { role, classId } = socket.data || {};
